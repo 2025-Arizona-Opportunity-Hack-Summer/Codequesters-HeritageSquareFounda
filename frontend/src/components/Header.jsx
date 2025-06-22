@@ -21,7 +21,7 @@ const Header = ({ driveFolderId, setDriveFolderId }) => {
           {/* Title */}
           <div className="text-left">
             <h1 className="font-serif text-2xl sm:text-3xl text-heritage-off-white font-bold tracking-wide leading-tight">
-              Heritage Square
+              The Square PHX
             </h1>
             <p className="text-heritage-off-white/80 text-sm font-light tracking-wider -mt-1">
               AI Assistant
