@@ -25,6 +25,5 @@ COPY . .
 # Expose the port the app runs on
 EXPOSE 8000
 
-# Define the command to run the application
-# Use 0.0.0.0 to make it accessible from outside the container
+# The default command will be overridden in docker-compose, but this is a good default.
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

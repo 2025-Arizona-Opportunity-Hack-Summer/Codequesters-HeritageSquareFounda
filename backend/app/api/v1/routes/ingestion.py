@@ -1,65 +1,60 @@
-import uuid
 import os
-from datetime import datetime, timezone
-from fastapi import APIRouter, BackgroundTasks, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
+from celery.result import AsyncResult
 
 from app.schemas.ingestion import IngestionRequest, IngestionResponse, JobStatus
-from app.services.pipeline import run_ingestion_pipeline
-from app.core.config import DATA_PATH # Make sure DATA_PATH is imported
+from app.core.config import DATA_PATH
+from app.tasks import run_ingestion_task # Import the new Celery task
 
 router = APIRouter()
 
-# NOTE: This is a simple in-memory store. For production, you would replace
-# this with a more robust solution like Redis or a database.
-job_statuses = {}
+# The in-memory job_statuses dictionary is NO LONGER NEEDED.
 
-# --- ADD THIS NEW ENDPOINT ---
 @router.get("/check/{folder_id}", status_code=status.HTTP_200_OK, response_model=dict)
 def check_ingestion_status(folder_id: str):
     """
-    Checks if a vector store exists for the given folder ID.
-    This is used by the frontend to determine if ingestion is needed.
+    Checks if a vector store exists.
+    TODO: This should now check for the final artifact in Google Cloud Storage.
     """
-    vector_store_path = DATA_PATH / folder_id / "vector_store"
+    # For now, we keep the local check. This will be replaced with a GCS check.
+    vector_store_path = DATA_PATH / folder_id
     is_ingested = os.path.exists(vector_store_path)
     return {"is_ingested": is_ingested}
-# --- END OF NEW ENDPOINT ---
 
 
-@router.post("/", status_code=status.HTTP_202_ACCEPTED, response_model=IngestionResponse) # <-- CHANGE THIS LINE
-def run_ingestion_endpoint(
-    request: IngestionRequest,
-    background_tasks: BackgroundTasks
-):
+@router.post("/", status_code=status.HTTP_202_ACCEPTED, response_model=IngestionResponse)
+def run_ingestion_endpoint(request: IngestionRequest):
     """
-    Starts the ingestion process and returns a job ID for status tracking.
+    Dispatches an ingestion task to the Celery queue.
     """
     drive_folder_id = request.drive_folder_id
     if not drive_folder_id or "PASTE" in drive_folder_id:
         raise HTTPException(status_code=400, detail="A valid drive_folder_id must be provided.")
 
-    job_id = str(uuid.uuid4())
-    job_statuses[job_id] = {"status": "PENDING", "details": "Ingestion has been queued."}
-    
-    background_tasks.add_task(run_ingestion_pipeline, drive_folder_id, job_id, job_statuses)
+    # Dispatch the task to Celery. '.delay()' is the magic command.
+    task = run_ingestion_task.delay(drive_folder_id)
     
     return {
-        "message": "Ingestion process started in the background.",
-        "job_id": job_id
+        "message": "Ingestion process has been queued.",
+        "job_id": task.id  # Celery provides the job ID
     }
 
 @router.get("/status/{job_id}", response_model=JobStatus)
 def get_ingestion_status(job_id: str):
     """
-    Retrieves the status of an ingestion job.
+    Retrieves the status of a Celery task.
     """
-    job = job_statuses.get(job_id)
-    if not job:
+    task_result = AsyncResult(job_id, app=run_ingestion_task.app)
+    
+    if not task_result:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found.")
 
-    # Compute elapsed_time dynamically if job is running
-    if job.get("start_time") and not job.get("end_time"):
-        start = datetime.fromisoformat(job["start_time"].replace("Z", "+00:00"))
-        now = datetime.now(timezone.utc)
-        job["elapsed_time"] = (now - start).total_seconds()
-    return job
+    details = ""
+    if task_result.info and isinstance(task_result.info, dict):
+        details = task_result.info.get('details', '')
+
+    return {
+        "job_id": job_id,
+        "status": task_result.state,
+        "details": details,
+    }

@@ -16,3 +16,6 @@ pytesseract
 python-dotenv
 requests
 gunicorn
+redis
+celery[redis]
+google-cloud-storage

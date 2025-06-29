@@ -1,0 +1,17 @@
+# Ignore the Python virtual environment
+venv/
+.venv/
+
+# Ignore Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# CRITICAL: Ignore the data directory. This is the main cause of the slowdown.
+# This data is generated inside the container via a volume, it should not be in the image.
+data/
+
+# Ignore environment files and secrets
+.env
+token.json

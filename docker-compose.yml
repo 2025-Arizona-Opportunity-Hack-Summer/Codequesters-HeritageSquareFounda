@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  # 1. Redis Service
+  redis:
+    image: "redis:alpine"
+    container_name: codequesters-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  # 2. Backend API Service (FastAPI)
+  backend:
+    build: ./backend
+    container_name: codequesters-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app  # Mounts local code for live-reloading
+      - ./backend/data:/app/data # Persists the data directory
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - redis
+    # The command to run the web server
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # 3. Celery Worker Service
+  worker:
+    build: ./backend # Uses the SAME image as the backend
+    container_name: codequesters-worker
+    volumes:
+      - ./backend:/app
+      - ./backend/data:/app/data
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - redis
+    # The command to run the Celery worker
+    # No need for --pool=solo because we are in a Linux container environment
+    command: celery -A app.tasks.celery_app worker --loglevel=info
+
+  # 4. Frontend Service (React + Nginx)
+  frontend:
+    build: ./frontend
+    container_name: codequesters-frontend
+    ports:
+      - "5173:80" # Map local port 5173 to container port 80
+    depends_on:
+      - backend
+
+volumes:
+  redis_data:

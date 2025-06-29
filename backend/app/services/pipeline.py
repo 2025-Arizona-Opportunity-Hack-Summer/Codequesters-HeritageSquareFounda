@@ -1,58 +1,48 @@
 import time
 from datetime import datetime
+from typing import Callable
 
-from app.core.config import DATA_PATH
 from app.services.drive import get_drive_service, download_files_from_folder
 from app.services.documents import sync_and_update_vector_store
+from app.core.config import DATA_PATH
 
-def run_ingestion_pipeline(drive_folder_id: str, job_id: str, statuses: dict):
+# The pipeline now accepts a progress_callback function
+def run_ingestion_pipeline(drive_folder_id: str, progress_callback: Callable):
     """
-    Runs the full ingestion pipeline and updates the status in a shared dictionary.
+    The main ingestion pipeline, now with progress reporting.
     """
-    print(f"--- Starting Background Ingestion Pipeline for Job ID: {job_id} ---")
-
-    # Create dynamic paths
-    source_docs_path = DATA_PATH / drive_folder_id / "source_docs"
-    vector_store_path = DATA_PATH / drive_folder_id / "vector_store"
-
-    start_time = datetime.utcnow()
-    statuses[job_id].update({
-        "start_time": start_time.isoformat() + "Z",
-        "end_time": None,
-        "elapsed_time": 0,
-        "total_time": None,
-    })
-
     try:
-        # 1. Download files
-        statuses[job_id].update({"status": "DOWNLOADING", "details": "Downloading files from Drive..."})
+        # --- Step 1: Initialization ---
+        progress_callback("INITIALIZING", f"Starting ingestion for folder: {drive_folder_id}")
+
+        # Create dynamic paths
+        source_docs_path = DATA_PATH / drive_folder_id / "source_docs"
+        vector_store_path = DATA_PATH / drive_folder_id / "vector_store"
+
+        start_time = datetime.utcnow()
+
+        # --- Step 2: Syncing and Updating ---
+        progress_callback("SYNCING", "Syncing with Google Drive and updating vector store...")
+        
+        # --- USE THE ORIGINAL, WORKING LOGIC ---
         drive_service = get_drive_service()
         drive_files = download_files_from_folder(drive_service, drive_folder_id, source_docs_path)
+        sync_and_update_vector_store(drive_folder_id, drive_files)
 
-        # 2. Sync and update vector store
-        statuses[job_id].update({"status": "SYNCING", "details": "Syncing vector store..."})
-        sync_and_update_vector_store(drive_files, vector_store_path)
+        # --- Step 3: Upload to GCS (New) ---
+        progress_callback("UPLOADING", "Uploading vector store to Google Cloud Storage...")
+        # TODO: Add logic here to upload the contents of vector_store_path to GCS.
+        # For example: upload_folder_to_gcs(vector_store_path, f"{drive_folder_id}/vector_store")
 
         end_time = datetime.utcnow()
         total_time = (end_time - start_time).total_seconds()
-        statuses[job_id].update({
-            "status": "COMPLETED",
-            "details": "Ingestion pipeline finished successfully.",
-            "end_time": end_time.isoformat() + "Z",
-            "total_time": total_time,
-            "elapsed_time": total_time,
-        })
-        print(f"\n--- Ingestion Pipeline for Job {job_id} Complete ---")
+        progress_callback("COMPLETE", "Pipeline finished successfully.")
+        print(f"\n--- Ingestion Pipeline Complete ---")
 
     except Exception as e:
         end_time = datetime.utcnow()
         total_time = (end_time - start_time).total_seconds()
-        statuses[job_id].update({
-            "status": "FAILED",
-            "details": str(e),
-            "end_time": end_time.isoformat() + "Z",
-            "total_time": total_time,
-            "elapsed_time": total_time,
-        })
-        print(f"--- ERROR in Ingestion Pipeline for Job {job_id} ---")
+        print(f"--- ERROR in Ingestion Pipeline ---")
         print(str(e))
+        progress_callback("FAILURE", str(e))
+        raise
