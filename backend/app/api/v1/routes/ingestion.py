@@ -1,9 +1,11 @@
 import uuid
+import os
 from datetime import datetime, timezone
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 
 from app.schemas.ingestion import IngestionRequest, IngestionResponse, JobStatus
 from app.services.pipeline import run_ingestion_pipeline
+from app.core.config import DATA_PATH # Make sure DATA_PATH is imported
 
 router = APIRouter()
 
@@ -11,7 +13,20 @@ router = APIRouter()
 # this with a more robust solution like Redis or a database.
 job_statuses = {}
 
-@router.post("/run", status_code=status.HTTP_202_ACCEPTED, response_model=IngestionResponse)
+# --- ADD THIS NEW ENDPOINT ---
+@router.get("/check/{folder_id}", status_code=status.HTTP_200_OK, response_model=dict)
+def check_ingestion_status(folder_id: str):
+    """
+    Checks if a vector store exists for the given folder ID.
+    This is used by the frontend to determine if ingestion is needed.
+    """
+    vector_store_path = DATA_PATH / folder_id / "vector_store"
+    is_ingested = os.path.exists(vector_store_path)
+    return {"is_ingested": is_ingested}
+# --- END OF NEW ENDPOINT ---
+
+
+@router.post("/", status_code=status.HTTP_202_ACCEPTED, response_model=IngestionResponse) # <-- CHANGE THIS LINE
 def run_ingestion_endpoint(
     request: IngestionRequest,
     background_tasks: BackgroundTasks

@@ -1,21 +1,12 @@
 import React, { useState } from 'react';
 import { PaperAirplaneIcon, ExclamationTriangleIcon } from '@heroicons/react/24/solid';
 
-const Header = () => {
-  return (
-    <header className="p-4 border-b border-heritage-off-white/20 text-center">
-      <h1 className="font-serif text-3xl text-heritage-off-white">Heritage Square AI Assistant</h1>
-    </header>
-  );
-};
-
 const InputForm = ({ input, setInput, handleSubmit, isLoading, isChatDisabled }) => {
   const [isFocused, setIsFocused] = useState(false);
 
   return (
     <footer className="backdrop-blur-md bg-heritage-green/80 border-t border-heritage-off-white/10 shadow-lg">
       <div className="p-4 sm:p-6">
-        {/* Disabled State Warning */}
         {isChatDisabled && (
           <div className="flex items-center justify-center gap-2 mb-4 p-3 bg-heritage-gold/20 rounded-lg border border-heritage-gold/30">
             <ExclamationTriangleIcon className="w-5 h-5 text-heritage-gold" />
